@@ -1,6 +1,6 @@
 module github.com/alextheberge/opsy
 
-go 1.24.0
+go 1.21
 
 require (
 	github.com/anthropics/anthropic-sdk-go v0.2.0-beta.3
