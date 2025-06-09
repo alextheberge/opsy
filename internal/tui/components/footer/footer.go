@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/datolabs-io/opsy/internal/agent"
-	"github.com/datolabs-io/opsy/internal/thememanager"
+	"github.com/alextheberge/opsy/internal/agent"
+	"github.com/alextheberge/opsy/internal/thememanager"
 )
 
 // Model represents the footer component.

@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/datolabs-io/opsy/assets"
-	"github.com/datolabs-io/opsy/internal/config"
+	"github.com/alextheberge/opsy/assets"
+	"github.com/alextheberge/opsy/internal/config"
 	"github.com/invopop/jsonschema"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"golang.org/x/exp/maps"

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/datolabs-io/opsy/assets"
+	"github.com/alextheberge/opsy/assets"
 	"gopkg.in/yaml.v3"
 )
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datolabs-io/opsy/internal/config"
+	"github.com/alextheberge/opsy/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
