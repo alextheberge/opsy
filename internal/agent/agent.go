@@ -301,7 +301,7 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 		// Send the tool output as a message
 		a.communication.Messages <- Message{
 			Tool:      toolCall.Tool,
-			Message:   toolOutput.Content,
+			Message:   toolOutput.Result,
 			Timestamp: time.Now(),
 		}
 	}
