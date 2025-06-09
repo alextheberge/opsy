@@ -258,6 +258,8 @@ func (c *Config) validate() error {
 		if c.configuration.Ollama.MaxTokens < 1 {
 			return ErrInvalidOllamaMaxTokens
 		}
+		// When Ollama is enabled, we don't need to validate Anthropic configuration
+		// The Anthropic API key is not required when using Ollama
 	} else {
 		// If Ollama is not enabled, validate Anthropic configuration
 		if c.configuration.Anthropic.APIKey == "" {

@@ -149,6 +149,7 @@ func TestLoadConfig_CustomValues(t *testing.T) {
 // - Validates temperature range
 // - Validates max tokens value
 // - Validates log level values
+// - Validates Ollama configuration
 func TestLoadConfig_ValidationErrors(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -157,9 +158,29 @@ func TestLoadConfig_ValidationErrors(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name:        "missing API key",
+			name:        "missing API key when Ollama is not enabled",
 			configData:  []byte("logging:\n  level: info"),
 			expectedErr: "anthropic API key is required",
+		},
+		{
+			name:        "Ollama enabled without API key is valid",
+			configFile:  "ollama_enabled.yaml",
+			expectedErr: "",
+		},
+		{
+			name:        "Ollama enabled without host is invalid",
+			configFile:  "ollama_missing_host.yaml",
+			expectedErr: "ollama host is required",
+		},
+		{
+			name:        "Ollama enabled with invalid temperature",
+			configFile:  "ollama_invalid_temperature.yaml",
+			expectedErr: "ollama temperature must be between 0 and 1",
+		},
+		{
+			name:        "Ollama enabled with invalid max tokens",
+			configFile:  "ollama_invalid_max_tokens.yaml",
+			expectedErr: "ollama max tokens must be greater than 0",
 		},
 		{
 			name: "invalid temperature low",
@@ -230,12 +251,25 @@ tools:
 			// Create config file with test case content
 			configDir := filepath.Join(tempDir, ".opsy")
 			require.NoError(t, os.MkdirAll(configDir, 0755))
-			require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.yaml"), tt.configData, 0644))
+
+			if tt.configFile != "" {
+				// Read test data from file
+				testData, err := os.ReadFile(filepath.Join("testdata", tt.configFile))
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.yaml"), testData, 0644))
+			} else {
+				require.NoError(t, os.WriteFile(filepath.Join(configDir, "config.yaml"), tt.configData, 0644))
+			}
 
 			manager := New()
 			err := manager.LoadConfig()
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), tt.expectedErr)
+
+			if tt.expectedErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErr)
+			}
 		})
 	}
 }
@@ -427,6 +461,38 @@ func TestValidate(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
+			name: "valid config with Ollama enabled",
+			config: Config{
+				configuration: Configuration{
+					Logging: LoggingConfiguration{
+						Level: "debug",
+						Path:  "test.log",
+					},
+					Anthropic: AnthropicConfiguration{
+						APIKey:      "", // Empty API key is valid when Ollama is enabled
+						Model:       "test-model",
+						Temperature: 0.5,
+						MaxTokens:   100,
+					},
+					Ollama: OllamaConfiguration{
+						Enabled:     true,
+						Host:        "http://localhost:11434",
+						Model:       "codellama:13b",
+						Temperature: 0.7,
+						MaxTokens:   1024,
+					},
+					Tools: ToolsConfiguration{
+						Timeout: 120,
+						Exec: ExecToolConfiguration{
+							Timeout: 60,
+							Shell:   availableShell,
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+		},
+		{
 			name: "invalid log level",
 			config: Config{
 				configuration: Configuration{
@@ -509,6 +575,72 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			expectedErr: ErrInvalidMaxTokens,
+		},
+		{
+			name: "Ollama enabled without host",
+			config: Config{
+				configuration: Configuration{
+					Logging: LoggingConfiguration{
+						Level: "info",
+					},
+					Ollama: OllamaConfiguration{
+						Enabled:     true,
+						Host:        "",
+						Temperature: 0.7,
+						MaxTokens:   1024,
+					},
+					Tools: ToolsConfiguration{
+						Exec: ExecToolConfiguration{
+							Shell: availableShell,
+						},
+					},
+				},
+			},
+			expectedErr: ErrMissingOllamaHost,
+		},
+		{
+			name: "Ollama enabled with invalid temperature",
+			config: Config{
+				configuration: Configuration{
+					Logging: LoggingConfiguration{
+						Level: "info",
+					},
+					Ollama: OllamaConfiguration{
+						Enabled:     true,
+						Host:        "http://localhost:11434",
+						Temperature: 1.5,
+						MaxTokens:   1024,
+					},
+					Tools: ToolsConfiguration{
+						Exec: ExecToolConfiguration{
+							Shell: availableShell,
+						},
+					},
+				},
+			},
+			expectedErr: ErrInvalidOllamaTemp,
+		},
+		{
+			name: "Ollama enabled with invalid max tokens",
+			config: Config{
+				configuration: Configuration{
+					Logging: LoggingConfiguration{
+						Level: "info",
+					},
+					Ollama: OllamaConfiguration{
+						Enabled:     true,
+						Host:        "http://localhost:11434",
+						Temperature: 0.7,
+						MaxTokens:   0,
+					},
+					Tools: ToolsConfiguration{
+						Exec: ExecToolConfiguration{
+							Shell: availableShell,
+						},
+					},
+				},
+			},
+			expectedErr: ErrInvalidOllamaMaxTokens,
 		},
 	}
 
