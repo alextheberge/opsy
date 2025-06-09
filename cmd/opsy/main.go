@@ -8,12 +8,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/datolabs-io/opsy/internal/agent"
-	"github.com/datolabs-io/opsy/internal/config"
-	"github.com/datolabs-io/opsy/internal/thememanager"
-	"github.com/datolabs-io/opsy/internal/tool"
-	"github.com/datolabs-io/opsy/internal/toolmanager"
-	"github.com/datolabs-io/opsy/internal/tui"
+	"github.com/alextheberge/opsy/internal/agent"
+	"github.com/alextheberge/opsy/internal/config"
+	"github.com/alextheberge/opsy/internal/thememanager"
+	"github.com/alextheberge/opsy/internal/tool"
+	"github.com/alextheberge/opsy/internal/toolmanager"
+	"github.com/alextheberge/opsy/internal/tui"
 )
 
 const (

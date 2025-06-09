@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/datolabs-io/opsy/assets"
-	"github.com/datolabs-io/opsy/internal/agent"
-	"github.com/datolabs-io/opsy/internal/config"
-	"github.com/datolabs-io/opsy/internal/tool"
+	"github.com/alextheberge/opsy/assets"
+	"github.com/alextheberge/opsy/internal/agent"
+	"github.com/alextheberge/opsy/internal/config"
+	"github.com/alextheberge/opsy/internal/tool"
 	"gopkg.in/yaml.v3"
 )
 

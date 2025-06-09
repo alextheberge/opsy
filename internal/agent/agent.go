@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
-	"github.com/datolabs-io/opsy/assets"
-	"github.com/datolabs-io/opsy/internal/config"
-	"github.com/datolabs-io/opsy/internal/tool"
+	"github.com/alextheberge/opsy/assets"
+	"github.com/alextheberge/opsy/internal/config"
+	"github.com/alextheberge/opsy/internal/tool"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -174,8 +175,6 @@ func (a *Agent) Run(opts *tool.RunOptions, ctx context.Context) ([]tool.Output, 
 	logger.Debug("Agent running.")
 	a.communication.Status <- StatusRunning
 
-	output := []tool.Output{}
-
 	// Use Ollama if enabled, otherwise use Anthropic
 	if a.cfg.Ollama.Enabled {
 		return a.runWithOllama(opts, ctx, prompt, logger)
@@ -186,14 +185,14 @@ func (a *Agent) Run(opts *tool.RunOptions, ctx context.Context) ([]tool.Output, 
 
 // runWithOllama runs the agent with the Ollama client.
 func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt string, logger *slog.Logger) ([]tool.Output, error) {
-	output := []tool.Output{}
+	var output []tool.Output
 
 	// Format the task and tools for Ollama
 	toolsDescription := ""
 	if len(opts.Tools) > 0 {
 		toolsDescription = "You have access to the following tools:\n\n"
 		for _, t := range opts.Tools {
-			toolsDescription += fmt.Sprintf("- %s: %s\n", t.Name, t.Description)
+			toolsDescription += fmt.Sprintf("- %s: %s\n", t.GetName(), t.GetDescription())
 		}
 		toolsDescription += "\nWhen you need to use a tool, respond with a JSON object in the following format:\n"
 		toolsDescription += "```json\n{\"tool\": \"tool_name\", \"input\": {\"param1\": \"value1\", \"param2\": \"value2\"}}\n```\n"
@@ -241,7 +240,7 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 
 			// Add the final output
 			output = append(output, tool.Output{
-				Content: response,
+				Result: response,
 			})
 
 			break
@@ -263,10 +262,10 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 		}
 
 		// Find the tool
-		var selectedTool *tool.Tool
+		var selectedTool tool.Tool
 		for _, t := range opts.Tools {
-			if t.Name == toolCall.Tool {
-				selectedTool = &t
+			if t.GetName() == toolCall.Tool {
+				selectedTool = t
 				break
 			}
 		}
@@ -277,12 +276,12 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 		}
 
 		// Execute the tool
-		toolOutput, err := selectedTool.Run(ctx, toolCall.Input)
+		toolOutput, err := selectedTool.Execute(toolCall.Input, ctx)
 		if err != nil {
 			logger.With("error", err).Error("Failed to run tool.")
 			toolOutput = &tool.Output{
-				Content: fmt.Sprintf("Error: %v", err),
-				Error:   true,
+				Result: fmt.Sprintf("Error: %v", err),
+				IsError: true,
 			}
 		}
 
@@ -290,7 +289,7 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 		toolOutputText := fmt.Sprintf("\nTool: %s\nInput: %v\nOutput: %s\n",
 			toolCall.Tool,
 			toolCall.Input,
-			toolOutput.Content)
+			toolOutput.Result)
 
 		// Update the conversation and prompt for the next request
 		conversation += "\n" + response + toolOutputText
@@ -312,7 +311,7 @@ func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt
 
 // runWithAnthropic runs the agent with the Anthropic client.
 func (a *Agent) runWithAnthropic(opts *tool.RunOptions, ctx context.Context, prompt string, logger *slog.Logger) ([]tool.Output, error) {
-	output := []tool.Output{}
+	var output []tool.Output
 	messages := []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(opts.Task))}
 
 	for {
