@@ -20,6 +20,8 @@ type Configuration struct {
 	Logging LoggingConfiguration `yaml:"logging"`
 	// Anthropic is the configuration for the Anthropic API.
 	Anthropic AnthropicConfiguration `yaml:"anthropic"`
+	// Ollama is the configuration for the Ollama API.
+	Ollama OllamaConfiguration `yaml:"ollama"`
 	// Tools is the configuration for the tools.
 	Tools ToolsConfiguration `yaml:"tools"`
 }
@@ -63,6 +65,20 @@ type AnthropicConfiguration struct {
 	// Temperature is the temperature to use for the Anthropic API.
 	Temperature float64 `yaml:"temperature"`
 	// MaxTokens is the maximum number of tokens to use for the Anthropic API.
+	MaxTokens int64 `mapstructure:"max_tokens" yaml:"max_tokens"`
+}
+
+// OllamaConfiguration is the configuration for the Ollama API.
+type OllamaConfiguration struct {
+	// Enabled indicates whether to use Ollama instead of Anthropic.
+	Enabled bool `yaml:"enabled"`
+	// Host is the host for the Ollama API.
+	Host string `yaml:"host"`
+	// Model is the model to use for the Ollama API.
+	Model string `yaml:"model"`
+	// Temperature is the temperature to use for the Ollama API.
+	Temperature float64 `yaml:"temperature"`
+	// MaxTokens is the maximum number of tokens to use for the Ollama API.
 	MaxTokens int64 `mapstructure:"max_tokens" yaml:"max_tokens"`
 }
 
@@ -119,6 +135,12 @@ var (
 	ErrValidateConfig = errors.New("invalid config")
 	// ErrInvalidShell is returned when the shell is invalid.
 	ErrInvalidShell = errors.New("invalid exec shell")
+	// ErrMissingOllamaHost is returned when the Ollama host is missing.
+	ErrMissingOllamaHost = errors.New("ollama host is required when ollama is enabled")
+	// ErrInvalidOllamaTemp is returned when the Ollama temperature is invalid.
+	ErrInvalidOllamaTemp = errors.New("ollama temperature must be between 0 and 1")
+	// ErrInvalidOllamaMaxTokens is returned when the Ollama max tokens are invalid.
+	ErrInvalidOllamaMaxTokens = errors.New("ollama max tokens must be greater than 0")
 )
 
 // New creates a new config instance.
@@ -129,6 +151,7 @@ func New() *Config {
 		homePath: homeDir,
 		configuration: Configuration{
 			Anthropic: AnthropicConfiguration{},
+			Ollama:    OllamaConfiguration{},
 			Tools: ToolsConfiguration{
 				Exec: ExecToolConfiguration{},
 			},
@@ -222,16 +245,32 @@ func (c *Config) createDirs() error {
 }
 
 func (c *Config) validate() error {
-	if c.configuration.Anthropic.APIKey == "" {
-		return ErrMissingAPIKey
-	}
+	// If Ollama is enabled, validate Ollama configuration
+	if c.configuration.Ollama.Enabled {
+		if c.configuration.Ollama.Host == "" {
+			return ErrMissingOllamaHost
+		}
 
-	if c.configuration.Anthropic.Temperature < 0 || c.configuration.Anthropic.Temperature > 1 {
-		return ErrInvalidTemp
-	}
+		if c.configuration.Ollama.Temperature < 0 || c.configuration.Ollama.Temperature > 1 {
+			return ErrInvalidOllamaTemp
+		}
 
-	if c.configuration.Anthropic.MaxTokens < 1 {
-		return ErrInvalidMaxTokens
+		if c.configuration.Ollama.MaxTokens < 1 {
+			return ErrInvalidOllamaMaxTokens
+		}
+	} else {
+		// If Ollama is not enabled, validate Anthropic configuration
+		if c.configuration.Anthropic.APIKey == "" {
+			return ErrMissingAPIKey
+		}
+
+		if c.configuration.Anthropic.Temperature < 0 || c.configuration.Anthropic.Temperature > 1 {
+			return ErrInvalidTemp
+		}
+
+		if c.configuration.Anthropic.MaxTokens < 1 {
+			return ErrInvalidMaxTokens
+		}
 	}
 
 	level := strings.ToLower(c.configuration.Logging.Level)
@@ -263,6 +302,11 @@ func (c *Config) setDefaults() {
 	viper.SetDefault("anthropic.model", "claude-3-7-sonnet-latest")
 	viper.SetDefault("anthropic.temperature", 0.7)
 	viper.SetDefault("anthropic.max_tokens", 1024)
+	viper.SetDefault("ollama.enabled", false)
+	viper.SetDefault("ollama.host", "http://localhost:11434")
+	viper.SetDefault("ollama.model", "codellama:13b")
+	viper.SetDefault("ollama.temperature", 0.7)
+	viper.SetDefault("ollama.max_tokens", 1024)
 	viper.SetDefault("tools.timeout", 120)
 	viper.SetDefault("tools.exec.timeout", 0)
 	viper.SetDefault("tools.exec.shell", "/bin/sh")

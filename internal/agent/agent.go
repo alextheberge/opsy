@@ -38,11 +38,12 @@ type Status string
 
 // Agent is a struct that contains the state of the agent.
 type Agent struct {
-	client        *anthropic.Client
-	ctx           context.Context
-	cfg           config.Configuration
-	logger        *slog.Logger
-	communication *Communication
+	anthropicClient *anthropic.Client
+	ollamaClient    *OllamaClient
+	ctx             context.Context
+	cfg             config.Configuration
+	logger          *slog.Logger
+	communication   *Communication
 }
 
 // Message is a struct that contains a message from the agent.
@@ -87,13 +88,17 @@ func New(opts ...Option) *Agent {
 		opt(a)
 	}
 
-	if a.cfg.Anthropic.APIKey != "" {
+	// Initialize the appropriate client based on the configuration
+	if a.cfg.Ollama.Enabled {
+		a.ollamaClient = NewOllamaClient(a.cfg.Ollama.Host)
+		a.logger.WithGroup("config").With("max_tokens", a.cfg.Ollama.MaxTokens).With("model", a.cfg.Ollama.Model).
+			With("temperature", a.cfg.Ollama.Temperature).With("host", a.cfg.Ollama.Host).Debug("Agent initialized with Ollama.")
+	} else if a.cfg.Anthropic.APIKey != "" {
 		c := anthropic.NewClient(option.WithAPIKey(a.cfg.Anthropic.APIKey))
-		a.client = &c
+		a.anthropicClient = &c
+		a.logger.WithGroup("config").With("max_tokens", a.cfg.Anthropic.MaxTokens).With("model", a.cfg.Anthropic.Model).
+			With("temperature", a.cfg.Anthropic.Temperature).Debug("Agent initialized with Anthropic.")
 	}
-
-	a.logger.WithGroup("config").With("max_tokens", a.cfg.Anthropic.MaxTokens).With("model", a.cfg.Anthropic.Model).
-		With("temperature", a.cfg.Anthropic.Temperature).Debug("Agent initialized.")
 
 	return a
 }
@@ -119,10 +124,17 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-// WithClient sets the client for the agent.
+// WithClient sets the Anthropic client for the agent.
 func WithClient(client *anthropic.Client) Option {
 	return func(a *Agent) {
-		a.client = client
+		a.anthropicClient = client
+	}
+}
+
+// WithOllamaClient sets the Ollama client for the agent.
+func WithOllamaClient(client *OllamaClient) Option {
+	return func(a *Agent) {
+		a.ollamaClient = client
 	}
 }
 
@@ -163,6 +175,144 @@ func (a *Agent) Run(opts *tool.RunOptions, ctx context.Context) ([]tool.Output, 
 	a.communication.Status <- StatusRunning
 
 	output := []tool.Output{}
+
+	// Use Ollama if enabled, otherwise use Anthropic
+	if a.cfg.Ollama.Enabled {
+		return a.runWithOllama(opts, ctx, prompt, logger)
+	} else {
+		return a.runWithAnthropic(opts, ctx, prompt, logger)
+	}
+}
+
+// runWithOllama runs the agent with the Ollama client.
+func (a *Agent) runWithOllama(opts *tool.RunOptions, ctx context.Context, prompt string, logger *slog.Logger) ([]tool.Output, error) {
+	output := []tool.Output{}
+
+	// Format the task and tools for Ollama
+	toolsDescription := ""
+	if len(opts.Tools) > 0 {
+		toolsDescription = "You have access to the following tools:\n\n"
+		for _, t := range opts.Tools {
+			toolsDescription += fmt.Sprintf("- %s: %s\n", t.Name, t.Description)
+		}
+		toolsDescription += "\nWhen you need to use a tool, respond with a JSON object in the following format:\n"
+		toolsDescription += "```json\n{\"tool\": \"tool_name\", \"input\": {\"param1\": \"value1\", \"param2\": \"value2\"}}\n```\n"
+		toolsDescription += "After receiving the tool output, continue the conversation."
+	}
+
+	// Combine the system prompt with tools description
+	systemPrompt := prompt
+	if toolsDescription != "" {
+		systemPrompt += "\n\n" + toolsDescription
+	}
+
+	// Create the initial request
+	req := OllamaRequest{
+		Model:       a.cfg.Ollama.Model,
+		Prompt:      opts.Task,
+		System:      systemPrompt,
+		Temperature: a.cfg.Ollama.Temperature,
+		MaxTokens:   a.cfg.Ollama.MaxTokens,
+	}
+
+	// Keep track of the conversation history
+	conversation := opts.Task
+
+	for {
+		// Send the request to Ollama
+		resp, err := a.ollamaClient.Generate(ctx, req)
+		if err != nil {
+			logger.With("error", err).Error("Failed to send message to Ollama API.")
+			return nil, err
+		}
+
+		// Process the response
+		response := resp.Response
+
+		// Check if the response contains a tool call
+		toolCallStart := strings.Index(response, "{\"tool\":")
+		if toolCallStart == -1 {
+			// No tool call, just return the response
+			a.communication.Messages <- Message{
+				Tool:      opts.Caller,
+				Message:   response,
+				Timestamp: time.Now(),
+			}
+
+			// Add the final output
+			output = append(output, tool.Output{
+				Content: response,
+			})
+
+			break
+		}
+
+		// Extract the tool call JSON
+		toolCallEnd := strings.LastIndex(response, "}") + 1
+		toolCallJSON := response[toolCallStart:toolCallEnd]
+
+		// Parse the tool call
+		var toolCall struct {
+			Tool  string                 `json:"tool"`
+			Input map[string]interface{} `json:"input"`
+		}
+
+		if err := json.Unmarshal([]byte(toolCallJSON), &toolCall); err != nil {
+			logger.With("error", err).Error("Failed to parse tool call.")
+			continue
+		}
+
+		// Find the tool
+		var selectedTool *tool.Tool
+		for _, t := range opts.Tools {
+			if t.Name == toolCall.Tool {
+				selectedTool = &t
+				break
+			}
+		}
+
+		if selectedTool == nil {
+			logger.With("tool", toolCall.Tool).Error("Tool not found.")
+			continue
+		}
+
+		// Execute the tool
+		toolOutput, err := selectedTool.Run(ctx, toolCall.Input)
+		if err != nil {
+			logger.With("error", err).Error("Failed to run tool.")
+			toolOutput = &tool.Output{
+				Content: fmt.Sprintf("Error: %v", err),
+				Error:   true,
+			}
+		}
+
+		// Add the tool output to the conversation
+		toolOutputText := fmt.Sprintf("\nTool: %s\nInput: %v\nOutput: %s\n",
+			toolCall.Tool,
+			toolCall.Input,
+			toolOutput.Content)
+
+		// Update the conversation and prompt for the next request
+		conversation += "\n" + response + toolOutputText
+		req.Prompt = conversation
+
+		// Add the tool output to the output
+		output = append(output, *toolOutput)
+
+		// Send the tool output as a message
+		a.communication.Messages <- Message{
+			Tool:      toolCall.Tool,
+			Message:   toolOutput.Content,
+			Timestamp: time.Now(),
+		}
+	}
+
+	return output, nil
+}
+
+// runWithAnthropic runs the agent with the Anthropic client.
+func (a *Agent) runWithAnthropic(opts *tool.RunOptions, ctx context.Context, prompt string, logger *slog.Logger) ([]tool.Output, error) {
+	output := []tool.Output{}
 	messages := []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(opts.Task))}
 
 	for {
@@ -183,7 +333,7 @@ func (a *Agent) Run(opts *tool.RunOptions, ctx context.Context) ([]tool.Output, 
 			}
 		}
 
-		message, err := a.client.Messages.New(ctx, msg)
+		message, err := a.anthropicClient.Messages.New(ctx, msg)
 
 		if err != nil {
 			// TODO(t-dabasinskas): Implement retry logic
