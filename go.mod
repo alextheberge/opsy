@@ -1,6 +1,8 @@
-module github.com/datolabs-io/opsy
+module github.com/alextheberge/opsy
 
 go 1.24.0
+
+replace github.com/datolabs-io/opsy => github.com/alextheberge/opsy v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/anthropics/anthropic-sdk-go v0.2.0-beta.3

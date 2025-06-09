@@ -81,7 +81,7 @@ Opsy adapts to your environment and only uses tools that are installed on your s
 For users with Go 1.24 or later:
 
 ```bash
-go install github.com/datolabs-io/opsy/cmd/opsy@latest
+go install github.com/alextheberge/opsy/cmd/opsy@latest
 ```
 
 Ensure your Go bin directory is in your PATH.
@@ -91,13 +91,13 @@ Ensure your Go bin directory is in your PATH.
 For macOS and Linux users with [Homebrew](https://brew.sh):
 
 ```bash
-brew tap datolabs-io/opsy https://github.com/datolabs-io/opsy
-brew install datolabs-io/opsy/opsy
+brew tap alextheberge/opsy https://github.com/alextheberge/opsy
+brew install alextheberge/opsy/opsy
 ```
 
 ### Direct Download
 
-Each [release](https://github.com/datolabs-io/opsy/releases) includes binaries for various platforms:
+Each [release](https://github.com/alextheberge/opsy/releases) includes binaries for various platforms:
 
 1. Download the appropriate binary for your operating system
 2. Make it executable (Unix-based systems): `chmod +x opsy`
