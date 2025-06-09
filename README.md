@@ -22,9 +22,13 @@ Click on the screenshot to [watch the full demonstration](https://youtu.be/j5sWZ
 
 ## Prerequisites
 
-### Anthropic API Key
+### LLM Provider
 
-Opsy uses Anthropic's Claude AI models to provide intelligent assistance. You'll need an Anthropic API key:
+Opsy can use either Anthropic's Claude AI models or Ollama to provide intelligent assistance.
+
+#### Option 1: Anthropic API Key (Default)
+
+By default, Opsy uses Anthropic's Claude AI models. You'll need an Anthropic API key:
 
 1. Create an account at [Anthropic's website](https://www.anthropic.com/)
 2. Generate an API key from your account dashboard
@@ -32,6 +36,28 @@ Opsy uses Anthropic's Claude AI models to provide intelligent assistance. You'll
 
    ```bash
    export ANTHROPIC_API_KEY=your_api_key_here
+   ```
+
+#### Option 2: Ollama (Local LLM)
+
+Alternatively, you can use Ollama to run LLMs locally:
+
+1. Install Ollama from [Ollama's website](https://ollama.ai/)
+2. Pull the codellama:13b model (or another model of your choice):
+
+   ```bash
+   ollama pull codellama:13b
+   ```
+
+3. Configure Opsy to use Ollama by creating or editing your config file at `~/.opsy/config.yaml`:
+
+   ```yaml
+   ollama:
+     enabled: true
+     host: http://localhost:11434
+     model: codellama:13b
+     temperature: 0.7
+     max_tokens: 1024
    ```
 
 ### Command-Line Tools
